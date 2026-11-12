@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+                <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -808,28 +808,25 @@
         }
 
         // ========== IMPORTAR / EXPORTAR LISTA DE COMPRAS (JSON) ==========
-        
         function exportListJSON() {
-            if (selectedItems.length === 0) {
-                alert("Tu lista está vacía. Añade productos primero antes de exportar.");
-                return;
-            }
-            
             // Si el usuario da clic en exportar estando en el Paso 2, guardamos las cantidades primero.
             if (!document.getElementById('step-2').classList.contains('hidden')) {
                 saveQuantities();
             }
 
-            // Convertir el arreglo de productos a un texto JSON
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(selectedItems));
+            const jsonString = JSON.stringify(selectedItems);
+            // Empaquetar usando Blob para evitar problemas de codificación en celulares
+            const blob = new Blob([jsonString], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
             
-            // Crear un enlace temporal para forzar la descarga del archivo
             const dlAnchorElem = document.createElement('a');
-            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("href", url);
             dlAnchorElem.setAttribute("download", "lista_compras.json");
             document.body.appendChild(dlAnchorElem);
             dlAnchorElem.click();
-            dlAnchorElem.remove();
+            
+            document.body.removeChild(dlAnchorElem);
+            URL.revokeObjectURL(url);
         }
 
         function importListJSON(event) {
