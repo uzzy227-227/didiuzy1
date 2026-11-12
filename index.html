@@ -808,7 +808,42 @@
         }
 
         // ========== IMPORTAR / EXPORTAR LISTA DE COMPRAS (JSON) ==========
-        function exportListJSON() {
+function importListJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    
+                    // Acepta tanto si es un arreglo directo como si viene envuelto en un objeto
+                    let itemsArray = [];
+                    if (Array.isArray(importedData)) {
+                        itemsArray = importedData;
+                    } else if (importedData && Array.isArray(importedData.items)) {
+                        itemsArray = importedData.items;
+                    } else if (typeof importedData === 'object' && importedData !== null) {
+                        // Si es un objeto genérico, intentamos extraer sus valores
+                        itemsArray = Object.values(importedData).find(val => Array.isArray(val)) || [];
+                    }
+
+                    if (itemsArray.length > 0 || Array.isArray(importedData)) {
+                        selectedItems = itemsArray;
+                        alert("¡Lista cargada correctamente!");
+                        goToStep(3); 
+                    } else {
+                        alert("El archivo no contiene elementos de lista válidos.");
+                    }
+                } catch (error) {
+                    console.error("Error leyendo JSON:", error);
+                    alert("Error al importar la lista. El archivo podría estar dañado o no ser un JSON válido.");
+                }
+                
+                event.target.value = ""; 
+            };
+            reader.readAsText(file);
+        }
             // Si el usuario da clic en exportar estando en el Paso 2, guardamos las cantidades primero.
             if (!document.getElementById('step-2').classList.contains('hidden')) {
                 saveQuantities();
