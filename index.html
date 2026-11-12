@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- Ganchos PWA: Color de tema y Manifiesto -->
+    <meta name="theme-color" content="#f97316">
+    <link rel="manifest" href="manifest.json">
+    <title>Super Lista de Compras</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome para los íconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- SheetJS (Excel Library) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .checked-item { text-decoration: line-through; opacity: 0.5; }
+        /* Esconder las flechas de los inputs de número */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        /* Transiciones suaves */
+        .step-transition { transition: opacity 0.3s ease-in-out; }
+        /* Scrollbar oculta para filtros */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .selected-card {
+            border-color: #4f46e5 !important;
+            background-color: #eef2ff !important;
+            transform: scale(1.02);
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 pb-28">
+
+    <!-- Encabezado -->
+    <header class="bg-indigo-600 text-white p-4 sm:p-6 shadow-md sticky top-0 z-40 flex flex-col sm:flex-row justify-between items-center gap-3">
+        <div class="text-center sm:text-left flex-1">
+            <h1 class="text-xl sm:text-2xl font-bold tracking-wide"><i class="fa-solid fa-cart-shopping mr-2"></i> Mis Compras</h1>
+            <p class="text-indigo-200 text-xs sm:text-sm mt-1" id="header-subtitle">Paso 1: Selecciona los productos que necesitas</p>
+        </div>
+        <div class="flex gap-2">
+            <!-- Input oculto para cargar JSON -->
+            <input type="file" id="json-upload" accept=".json" class="hidden" onchange="importListJSON(event)">
+            
+            <button onclick="document.getElementById('json-upload').click()" class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs sm:text-sm px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm border border-indigo-400">
+                <i class="fa-solid fa-file-import"></i> Importar
+            </button>
+            <button onclick="exportListJSON()" class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs sm:text-sm px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm border border-indigo-400">
+                <i class="fa-solid fa-file-export"></i> Exportar
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-4 sm:p-6 mt-2 relative">
+        
+        <!-- ================= PASO 1: SELECCIÓN MASIVA ================= -->
+        <section id="step-1" class="step-transition">
+            
+            <!-- Buscador y Añadir Manual -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4 flex flex-col sm:flex-row gap-3">
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" id="search-input" placeholder="Buscar producto (ej. Tomate, Leche...)" 
+                        class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                        oninput="filterProducts()">
+                </div>
+                <div class="flex gap-2 w-full sm:w-auto">
+                    <input type="text" id="custom-item-input" placeholder="Otro producto..." 
+                        class="flex-1 sm:w-48 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                    <button onclick="addCustomItem()" class="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-4 py-3 rounded-xl font-semibold transition shrink-0">
+                        <i class="fa-solid fa-plus"></i> Añadir
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filtros de Categoría (Scroll Horizontal) -->
+            <div class="overflow-x-auto no-scrollbar mb-4 pb-2">
+                <div class="flex gap-2" id="category-filters">
+                    <!-- Generado por JS -->
+                </div>
+            </div>
+            
+            <!-- Resumen Selección -->
+            <div class="mb-4 flex items-center justify-between">
+                <h2 class="text-lg font-bold text-slate-800">Catálogo</h2>
+                <span class="text-sm font-medium text-indigo-600 bg-indigo-100 px-3 py-1 rounded-full"><span id="selected-count">0</span> en carrito</span>
+            </div>
+            
+            <!-- Grid de Productos -->
+            <div id="product-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                <!-- Generado por JS -->
+            </div>
+
+            <!-- Botón Siguiente Flotante para Móviles -->
+            <div class="fixed bottom-6 right-6 z-50">
+                <button onclick="goToStep(2)" id="btn-next-step1" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-full transition shadow-xl shadow-indigo-600/40 flex items-center gap-2 transform hover:scale-105">
+                    Siguiente <span class="bg-white/20 px-2 py-0.5 rounded text-sm" id="btn-selected-count">0</span> <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- ================= PASO 2: CANTIDADES ================= -->
+        <section id="step-2" class="step-transition hidden">
+            <div class="mb-4">
+                <h2 class="text-xl font-bold text-slate-800">2. Asignar Cantidades</h2>
+                <p class="text-sm text-slate-500">Puedes usar números (2), fracciones (1/2) o medidas (1 kg).</p>
+            </div>
+            
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden max-w-3xl mx-auto">
+                <ul id="quantity-list" class="divide-y divide-slate-100">
+                    <!-- Generado por JS -->
+                </ul>
+            </div>
+
+            <div class="mt-8 flex justify-between max-w-3xl mx-auto pb-10">
+                <button onclick="goToStep(1)" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-3 px-6 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-left"></i> Atrás
+                </button>
+                <button onclick="goToStep(3)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-8 rounded-xl transition shadow-lg shadow-indigo-600/30 flex items-center gap-2">
+                    Ir de Compras <i class="fa-solid fa-cart-arrow-down"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- ================= PASO 3: LISTA Y PRECIOS ================= -->
+        <section id="step-3" class="step-transition hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- SECCIÓN 3.1: LISTA PARA MARCAR -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full lg:max-h-[70vh]">
+                    <div class="bg-slate-50 border-b border-slate-200 p-4 flex justify-between items-center shrink-0">
+                        <div>
+                            <h2 class="text-lg font-semibold text-slate-700">
+                                <i class="fa-solid fa-list-check text-indigo-500 mr-2"></i> Para el Carrito
+                            </h2>
+                            <p class="text-xs text-slate-500 mt-1">Marca lo que vayas agarrando.</p>
+                        </div>
+                        <button onclick="goToStep(2)" class="text-sm text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1.5 rounded-lg"><i class="fa-solid fa-pen"></i> Cantidades</button>
+                    </div>
+                    
+                    <div id="checklist-container" class="p-4 space-y-6 overflow-y-auto flex-1">
+                        <!-- Generado por JS -->
+                    </div>
+                </div>
+
+                <!-- SECCIÓN 3.2: CALCULADORA DE COSTOS -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full lg:max-h-[70vh]">
+                    <div class="bg-emerald-50 border-b border-emerald-100 p-4 shrink-0">
+                        <h2 class="text-lg font-semibold text-emerald-900">
+                            <i class="fa-solid fa-calculator text-emerald-600 mr-2"></i> Registro de Precios
+                        </h2>
+                        <p class="text-xs text-emerald-700/70 mt-1">Anota el costo de los productos. Se sumará abajo.</p>
+                    </div>
+
+                    <div class="p-0 sm:p-4 overflow-y-auto flex-1">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="hidden sm:table-header-group">
+                                <tr class="border-b-2 border-slate-100 text-slate-500 text-xs uppercase tracking-wider">
+                                    <th class="pb-3 font-medium px-2">Cant.</th>
+                                    <th class="pb-3 font-medium px-2">Producto</th>
+                                    <th class="pb-3 font-medium text-right px-2 w-28">Precio ($)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cost-table-body" class="divide-y divide-slate-100 sm:divide-y-0 text-sm">
+                                <!-- Generado por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- BARRA INFERIOR FIJA: TOTAL GASTADO (Solo en Paso 3) -->
+    <div id="bottom-bar" class="hidden fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] p-3 sm:p-4 z-50">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <div class="flex flex-col">
+                <span class="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Estimado</span>
+                <div class="text-xl sm:text-3xl font-bold text-emerald-600" id="total-display">
+                    $0.00
+                </div>
+            </div>
+            <div class="flex items-center gap-2 sm:gap-4">
+                <button onclick="goToStep(1)" class="p-2 sm:py-2.5 sm:px-4 text-slate-500 hover:bg-slate-100 rounded-xl text-sm transition hidden sm:block">
+                    Volver a catálogo
+                </button>
+                <button onclick="openExportModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 sm:py-3 px-4 sm:px-8 rounded-xl transition shadow-lg shadow-indigo-600/30 flex items-center gap-2 text-sm sm:text-base">
+                    <i class="fa-solid fa-file-excel hidden sm:inline"></i> Finalizar (Excel)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE HISTORIAL EXCEL (PASO 4) -->
+    <div id="export-modal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 transition-opacity">
+        <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative">
+            <button onclick="closeExportModal()" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+            <h2 class="text-xl font-bold text-slate-800 mb-2">Guardar Historial de Precios</h2>
+            <p class="text-sm text-slate-500 mb-6">Guarda un registro de tus compras para comparar el costo unitario de los productos a lo largo del tiempo.</p>
+            
+            <div class="space-y-4">
+                <button onclick="createExcelHistory()" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center text-center gap-1">
+                    <i class="fa-solid fa-file-excel text-3xl mb-1"></i>
+                    <span>Crear Nuevo Historial</span>
+                    <span class="text-[11px] font-normal opacity-80">Genera un archivo nuevo que empieza en la "Semana 1"</span>
+                </button>
+                
+                <div class="relative w-full">
+                    <input type="file" id="excel-upload" accept=".xlsx, .xls, .csv" class="hidden" onchange="updateExcelHistory(event)">
+                    <button onclick="document.getElementById('excel-upload').click()" class="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center text-center gap-1">
+                        <i class="fa-solid fa-file-import text-3xl mb-1"></i>
+                        <span>Actualizar Historial Anterior</span>
+                        <span class="text-[11px] font-normal opacity-80">Sube un Excel viejo y añade la siguiente semana automáticamente</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ================= BASE DE DATOS DE PRODUCTOS (MASIVA) =================
+        const categoriesList = ['Todo', 'Verduras', 'Frutas', 'Carnes', 'Mariscos', 'Lácteos', 'Abarrotes', 'Especias', 'Panadería', 'Bebidas'];
+        
+        const categoryIcons = {
+            'Verduras': '<i class="fa-solid fa-carrot text-green-500 w-5"></i>',
+            'Frutas': '<i class="fa-solid fa-apple-whole text-red-500 w-5"></i>',
+            'Carnes': '<i class="fa-solid fa-drumstick-bite text-orange-700 w-5"></i>',
+            'Mariscos': '<i class="fa-solid fa-fish text-blue-400 w-5"></i>',
+            'Lácteos': '<i class="fa-solid fa-cheese text-yellow-500 w-5"></i>',
+            'Abarrotes': '<i class="fa-solid fa-basket-shopping text-amber-600 w-5"></i>',
+            'Especias': '<i class="fa-solid fa-pepper-hot text-red-700 w-5"></i>',
+            'Panadería': '<i class="fa-solid fa-bread-slice text-amber-800 w-5"></i>',
+            'Bebidas': '<i class="fa-solid fa-mug-hot text-amber-900 w-5"></i>',
+            'Extra': '<i class="fa-solid fa-star text-indigo-500 w-5"></i>'
+        };
+
+        const masterProducts = [
+            // VERDURAS Y HORTALIZAS
+            { id: 1, name: 'Jitomate', category: 'Verduras', emoji: '🍅' },
+            { id: 2, name: 'Cebolla Blanca', category: 'Verduras', emoji: '🧅' },
+            { id: 3, name: 'Cebolla Morada', category: 'Verduras', emoji: '🧅' },
+            { id: 4, name: 'Ajo', category: 'Verduras', emoji: '🧄' },
+            { id: 5, name: 'Tomate Verde', category: 'Verduras', emoji: '🍏' },
+            { id: 6, name: 'Chile Serrano', category: 'Verduras', emoji: '🌶️' },
+            { id: 7, name: 'Chile Jalapeño', category: 'Verduras', emoji: '🌶️' },
+            { id: 8, name: 'Chile Poblano', category: 'Verduras', emoji: '🫑' },
+            { id: 9, name: 'Chile Habanero', category: 'Verduras', emoji: '🌶️' },
+            { id: 10, name: 'Pimiento Morrón', category: 'Verduras', emoji: '🫑' },
+            { id: 11, name: 'Papa Blanca', category: 'Verduras', emoji: '🥔' },
+            { id: 12, name: 'Zanahoria', category: 'Verduras', emoji: '🥕' },
+            { id: 13, name: 'Calabacita', category: 'Verduras', emoji: '🥒' },
+            { id: 14, name: 'Chayote', category: 'Verduras', emoji: '🍐' },
+            { id: 15, name: 'Nopal', category: 'Verduras', emoji: '🌵' },
+            { id: 16, name: 'Pepino', category: 'Verduras', emoji: '🥒' },
+            { id: 17, name: 'Lechuga Romana', category: 'Verduras', emoji: '🥬' },
+            { id: 18, name: 'Espinaca', category: 'Verduras', emoji: '🥬' },
+            { id: 19, name: 'Cilantro', category: 'Verduras', emoji: '🌿' },
+            { id: 20, name: 'Perejil', category: 'Verduras', emoji: '🌿' },
+            { id: 21, name: 'Epazote', category: 'Verduras', emoji: '🌿' },
+            { id: 22, name: 'Apio', category: 'Verduras', emoji: '🥬' },
+            { id: 23, name: 'Brócoli', category: 'Verduras', emoji: '🥦' },
+            { id: 24, name: 'Coliflor', category: 'Verduras', emoji: '🥦' },
+            { id: 25, name: 'Ejote', category: 'Verduras', emoji: '🫛' },
+            { id: 26, name: 'Elote (Mazorca)', category: 'Verduras', emoji: '🌽' },
+            { id: 27, name: 'Rábano', category: 'Verduras', emoji: '🔴' },
+            { id: 28, name: 'Jícama', category: 'Verduras', emoji: '🥔' },
+            { id: 29, name: 'Champiñón', category: 'Verduras', emoji: '🍄' },
+            { id: 30, name: 'Aguacate Hass', category: 'Verduras', emoji: '🥑' },
+            
+            // FRUTAS
+            { id: 31, name: 'Plátano', category: 'Frutas', emoji: '🍌' },
+            { id: 32, name: 'Manzana Roja', category: 'Frutas', emoji: '🍎' },
+            { id: 33, name: 'Manzana Verde', category: 'Frutas', emoji: '🍏' },
+            { id: 34, name: 'Limón con Semilla', category: 'Frutas', emoji: '🍋' },
+            { id: 35, name: 'Limón sin Semilla', category: 'Frutas', emoji: '🍋' },
+            { id: 36, name: 'Naranja', category: 'Frutas', emoji: '🍊' },
+            { id: 37, name: 'Mandarina', category: 'Frutas', emoji: '🍊' },
+            { id: 38, name: 'Toronja', category: 'Frutas', emoji: '🍊' },
+            { id: 39, name: 'Papaya', category: 'Frutas', emoji: '🥭' },
+            { id: 40, name: 'Sandía', category: 'Frutas', emoji: '🍉' },
+            { id: 41, name: 'Melón', category: 'Frutas', emoji: '🍈' },
+            { id: 42, name: 'Mango Ataulfo', category: 'Frutas', emoji: '🥭' },
+            { id: 43, name: 'Piña', category: 'Frutas', emoji: '🍍' },
+            { id: 44, name: 'Fresa', category: 'Frutas', emoji: '🍓' },
+            { id: 45, name: 'Uva Roja', category: 'Frutas', emoji: '🍇' },
+            { id: 46, name: 'Uva Verde', category: 'Frutas', emoji: '🍇' },
+            { id: 47, name: 'Guayaba', category: 'Frutas', emoji: '🍏' },
+            { id: 48, name: 'Durazno', category: 'Frutas', emoji: '🍑' },
+            { id: 49, name: 'Ciruela', category: 'Frutas', emoji: '🫐' },
+
+            // CARNES
+            { id: 50, name: 'Pollo Entero', category: 'Carnes', emoji: '🍗' },
+            { id: 51, name: 'Pechuga de Pollo', category: 'Carnes', emoji: '🥩' },
+            { id: 52, name: 'Pierna de Pollo', category: 'Carnes', emoji: '🍗' },
+            { id: 53, name: 'Bistec de Res', category: 'Carnes', emoji: '🥩' },
+            { id: 54, name: 'Arrachera', category: 'Carnes', emoji: '🥩' },
+            { id: 55, name: 'Ribeye', category: 'Carnes', emoji: '🥩' },
+            { id: 56, name: 'Carne Molida', category: 'Carnes', emoji: '🥩' },
+            { id: 57, name: 'Milanesa de Cerdo', category: 'Carnes', emoji: '🥩' },
+            { id: 58, name: 'Costilla de Cerdo', category: 'Carnes', emoji: '🍖' },
+            { id: 59, name: 'Chorizo', category: 'Carnes', emoji: '🌭' },
+            { id: 60, name: 'Salchicha', category: 'Carnes', emoji: '🌭' },
+            { id: 61, name: 'Jamón', category: 'Carnes', emoji: '🥓' },
+            { id: 62, name: 'Tocino', category: 'Carnes', emoji: '🥓' },
+
+            // MARISCOS
+            { id: 63, name: 'Filete de Pescado', category: 'Mariscos', emoji: '🐟' },
+            { id: 64, name: 'Pescado Entero', category: 'Mariscos', emoji: '🐟' },
+            { id: 65, name: 'Filete de Salmón', category: 'Mariscos', emoji: '🍣' },
+            { id: 66, name: 'Camarón', category: 'Mariscos', emoji: '🦐' },
+            { id: 67, name: 'Pulpo', category: 'Mariscos', emoji: '🐙' },
+            { id: 68, name: 'Ostiones', category: 'Mariscos', emoji: '🦪' },
+            { id: 69, name: 'Atún en Lata', category: 'Mariscos', emoji: '🥫' },
+
+            // LÁCTEOS Y HUEVO
+            { id: 70, name: 'Leche Entera', category: 'Lácteos', emoji: '🥛' },
+            { id: 71, name: 'Leche Deslactosada', category: 'Lácteos', emoji: '🥛' },
+            { id: 72, name: 'Huevo (Cono 30)', category: 'Lácteos', emoji: '🥚' },
+            { id: 73, name: 'Queso Oaxaca', category: 'Lácteos', emoji: '🧀' },
+            { id: 74, name: 'Queso Panela', category: 'Lácteos', emoji: '🧀' },
+            { id: 75, name: 'Queso Manchego', category: 'Lácteos', emoji: '🧀' },
+            { id: 76, name: 'Queso Fresco', category: 'Lácteos', emoji: '🧀' },
+            { id: 77, name: 'Mantequilla', category: 'Lácteos', emoji: '🧈' },
+            { id: 78, name: 'Crema', category: 'Lácteos', emoji: '🥣' },
+            { id: 79, name: 'Yogurt Natural', category: 'Lácteos', emoji: '🍦' },
+
+            // ABARROTES
+            { id: 80, name: 'Aceite Vegetal', category: 'Abarrotes', emoji: '🫙' },
+            { id: 81, name: 'Aceite de Oliva', category: 'Abarrotes', emoji: '🫒' },
+            { id: 82, name: 'Arroz Blanco', category: 'Abarrotes', emoji: '🍚' },
+            { id: 83, name: 'Frijol Negro', category: 'Abarrotes', emoji: '🫘' },
+            { id: 84, name: 'Frijol Pinto', category: 'Abarrotes', emoji: '🫘' },
+            { id: 85, name: 'Lentejas', category: 'Abarrotes', emoji: '🫘' },
+            { id: 86, name: 'Garbanzos', category: 'Abarrotes', emoji: '🫘' },
+            { id: 87, name: 'Azúcar', category: 'Abarrotes', emoji: '🍚' },
+            { id: 88, name: 'Sal de Grano', category: 'Abarrotes', emoji: '🧂' },
+            { id: 89, name: 'Pasta (Espagueti)', category: 'Abarrotes', emoji: '🍝' },
+            { id: 90, name: 'Mayonesa', category: 'Abarrotes', emoji: '🥣' },
+            { id: 91, name: 'Mostaza', category: 'Abarrotes', emoji: '🌭' },
+            { id: 92, name: 'Catsup', category: 'Abarrotes', emoji: '🍅' },
+            { id: 93, name: 'Vinagre Blanco', category: 'Abarrotes', emoji: '🫙' },
+            { id: 94, name: 'Maíz Pozolero', category: 'Abarrotes', emoji: '🌽' },
+            { id: 95, name: 'Harina de Trigo', category: 'Abarrotes', emoji: '🌾' },
+            { id: 96, name: 'Harina de Maíz (Maseca)', category: 'Abarrotes', emoji: '🌽' },
+            { id: 97, name: 'Avena', category: 'Abarrotes', emoji: '🌾' },
+            { id: 98, name: 'Puré de Tomate', category: 'Abarrotes', emoji: '🥫' },
+            { id: 99, name: 'Chiles en Lata', category: 'Abarrotes', emoji: '🥫' },
+            
+            // ESPECIAS Y CONDIMENTOS
+            { id: 100, name: 'Pimienta Negra', category: 'Especias', emoji: '⚫' },
+            { id: 101, name: 'Orégano', category: 'Especias', emoji: '🌿' },
+            { id: 102, name: 'Comino', category: 'Especias', emoji: '🫘' },
+            { id: 103, name: 'Canela en Rama', category: 'Especias', emoji: '🪵' },
+            { id: 104, name: 'Clavo de Olor', category: 'Especias', emoji: '🍂' },
+            { id: 105, name: 'Laurel', category: 'Especias', emoji: '🍃' },
+            { id: 106, name: 'Ajo en Polvo', category: 'Especias', emoji: '🧄' },
+            { id: 107, name: 'Consomé de Pollo', category: 'Especias', emoji: '🥣' },
+            { id: 108, name: 'Vainilla', category: 'Especias', emoji: '🧪' },
+            { id: 109, name: 'Levadura', category: 'Especias', emoji: '🍞' },
+            { id: 110, name: 'Chile Guajillo (Seco)', category: 'Especias', emoji: '🌶️' },
+            { id: 111, name: 'Chile Ancho (Seco)', category: 'Especias', emoji: '🌶️' },
+            { id: 112, name: 'Chile de Árbol (Seco)', category: 'Especias', emoji: '🌶️' },
+
+            // PANADERÍA Y TORTILLAS
+            { id: 113, name: 'Pan de Caja', category: 'Panadería', emoji: '🍞' },
+            { id: 114, name: 'Bolillo / Telera', category: 'Panadería', emoji: '🥖' },
+            { id: 115, name: 'Pan Dulce (Conchas)', category: 'Panadería', emoji: '🥐' },
+            { id: 116, name: 'Tortillas de Maíz', category: 'Panadería', emoji: '🫓' },
+            { id: 117, name: 'Tortillas de Harina', category: 'Panadería', emoji: '🫓' },
+            { id: 118, name: 'Galletas Marías', category: 'Panadería', emoji: '🍪' },
+
+            // BEBIDAS
+            { id: 119, name: 'Agua Embotellada', category: 'Bebidas', emoji: '💧' },
+            { id: 120, name: 'Refresco', category: 'Bebidas', emoji: '🥤' },
+            { id: 121, name: 'Jugo de Fruta', category: 'Bebidas', emoji: '🧃' },
+            { id: 122, name: 'Café en Grano', category: 'Bebidas', emoji: '🫘' },
+            { id: 123, name: 'Café Molido', category: 'Bebidas', emoji: '☕' },
+            { id: 124, name: 'Té', category: 'Bebidas', emoji: '🍵' },
+            { id: 125, name: 'Cerveza', category: 'Bebidas', emoji: '🍺' },
+            { id: 126, name: 'Vino Tinto', category: 'Bebidas', emoji: '🍷' }
+        ];
+
+        let selectedItems = []; 
+        let currentCategory = 'Todo';
+        let searchQuery = '';
+
+        // ========== INICIALIZACIÓN ==========
+        window.onload = () => {
+            renderCategoryFilters();
+            renderStep1();
+            goToStep(1);
+        };
+
+        // ========== CONTROL DE PASOS ==========
+        function goToStep(step) {
+            if (step === 2 && selectedItems.length === 0) {
+                const btn = document.getElementById('btn-next-step1');
+                btn.classList.add('bg-red-500', 'animate-bounce');
+                setTimeout(() => btn.classList.remove('bg-red-500', 'animate-bounce'), 1000);
+                return;
+            }
+
+            document.getElementById('step-1').classList.add('hidden');
+            document.getElementById('step-2').classList.add('hidden');
+            document.getElementById('step-3').classList.add('hidden');
+            document.getElementById('bottom-bar').classList.add('hidden');
+            
+            const subtitle = document.getElementById('header-subtitle');
+
+            if (step === 1) {
+                document.getElementById('step-1').classList.remove('hidden');
+                subtitle.innerText = "Paso 1: Selecciona los productos que necesitas";
+                renderStep1(); // Refrescar vista
+            } else if (step === 2) {
+                document.getElementById('step-2').classList.remove('hidden');
+                subtitle.innerText = "Paso 2: ¿Cuánto necesitas de cada cosa?";
+                renderStep2();
+            } else if (step === 3) {
+                document.getElementById('step-3').classList.remove('hidden');
+                document.getElementById('bottom-bar').classList.remove('hidden');
+                subtitle.innerText = "Paso 3: Marca y registra el costo";
+                saveQuantities();
+                renderStep3Checklist();
+                renderStep3CostCalculator();
+                calculateTotal();
+            }
+        }
+
+        // ========== PASO 1: SELECCIÓN ==========
+        function renderCategoryFilters() {
+            const container = document.getElementById('category-filters');
+            container.innerHTML = categoriesList.map(cat => `
+                <button onclick="setCategory('${cat}')" 
+                    id="cat-btn-${cat}"
+                    class="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition border ${cat === currentCategory ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
+                    ${cat}
+                </button>
+            `).join('');
+        }
+
+        function setCategory(cat) {
+            currentCategory = cat;
+            renderCategoryFilters();
+            renderStep1();
+        }
+
+        function filterProducts() {
+            searchQuery = document.getElementById('search-input').value.toLowerCase();
+            if(searchQuery.length > 0 && currentCategory !== 'Todo') {
+                currentCategory = 'Todo'; // Si busca, quitar filtro de categoría para mostrar resultados de todos lados
+                renderCategoryFilters();
+            }
+            renderStep1();
+        }
+
+        function renderStep1() {
+            const grid = document.getElementById('product-grid');
+            
+            let filtered = masterProducts;
+
+            // Filtro Categoria
+            if (currentCategory !== 'Todo') {
+                filtered = filtered.filter(p => p.category === currentCategory);
+            }
+
+            // Filtro Búsqueda
+            if (searchQuery) {
+                filtered = filtered.filter(p => p.name.toLowerCase().includes(searchQuery) || p.category.toLowerCase().includes(searchQuery));
+            }
+
+            // También incluir los custom items que se han agregado manualmente en la vista actual si no están filtrados por categoría (o si son 'Extra')
+            const customItems = selectedItems.filter(i => i.isCustom);
+            let finalProducts = [...filtered];
+            
+            customItems.forEach(ci => {
+                if (!masterProducts.find(m => m.id === ci.id)) {
+                    if ((currentCategory === 'Todo' || currentCategory === 'Extra') && 
+                        (ci.name.toLowerCase().includes(searchQuery))) {
+                        finalProducts.push(ci);
+                    }
+                }
+            });
+
+            if (finalProducts.length === 0) {
+                grid.innerHTML = `<div class="col-span-full py-10 text-center text-slate-400">No se encontraron productos. Usa el botón "Añadir" para agregarlo manualmente.</div>`;
+            } else {
+                grid.innerHTML = finalProducts.map(prod => {
+                    const isSelected = selectedItems.some(i => i.id === prod.id);
+                    return `
+                        <div onclick="toggleProduct(${prod.id}, '${prod.name.replace(/'/g, "\\'")}', '${prod.category}', '${prod.emoji}')" 
+                            class="flex flex-col items-center justify-center p-3 sm:p-4 rounded-2xl border-2 transition-all cursor-pointer select-none h-28 sm:h-32 ${isSelected ? 'selected-card' : 'border-slate-100 bg-white hover:border-indigo-100'}">
+                            <div class="text-3xl sm:text-4xl mb-2">${prod.emoji}</div>
+                            <div class="text-[11px] sm:text-sm font-semibold text-center leading-tight ${isSelected ? 'text-indigo-900' : 'text-slate-600'}">${prod.name}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            updateSelectedCounts();
+        }
+
+        function toggleProduct(id, name, category, emoji) {
+            const index = selectedItems.findIndex(i => i.id === id);
+            if (index > -1) {
+                selectedItems.splice(index, 1);
+            } else {
+                selectedItems.push({ id, name, category, emoji, qty: '1', price: null, checked: false, isCustom: false });
+            }
+            renderStep1();
+        }
+
+        function addCustomItem() {
+            const input = document.getElementById('custom-item-input');
+            const name = input.value.trim();
+            if (!name) return;
+
+            const newId = Date.now();
+            const newItem = {
+                id: newId,
+                name: name,
+                category: 'Extra',
+                emoji: '📦',
+                qty: '1',
+                price: null,
+                checked: false,
+                isCustom: true
+            };
+            
+            selectedItems.push(newItem);
+            input.value = '';
+            renderStep1(); // Refrescar
+        }
+
+        function updateSelectedCounts() {
+            const count = selectedItems.length;
+            document.getElementById('selected-count').innerText = count;
+            document.getElementById('btn-selected-count').innerText = count;
+            
+            const btn = document.getElementById('btn-next-step1');
+            if (count > 0) {
+                btn.classList.remove('opacity-50', 'scale-90');
+                btn.classList.add('opacity-100', 'scale-100');
+            } else {
+                btn.classList.remove('opacity-100', 'scale-100');
+                btn.classList.add('opacity-50', 'scale-90');
+            }
+        }
+
+        // ========== PASO 2: CANTIDADES ==========
+        function renderStep2() {
+            const list = document.getElementById('quantity-list');
+            
+            // Agrupar por categoría
+            const grouped = selectedItems.reduce((acc, item) => {
+                if(!acc[item.category]) acc[item.category] = [];
+                acc[item.category].push(item);
+                return acc;
+            }, {});
+
+            let html = '';
+            for (const [cat, items] of Object.entries(grouped)) {
+                html += `<li class="bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">${categoryIcons[cat] || '📦'} ${cat}</li>`;
+                items.forEach(item => {
+                    html += `
+                        <li class="flex items-center justify-between p-3 sm:p-4 hover:bg-slate-50 transition border-b border-slate-100 last:border-0">
+                            <div class="flex items-center gap-3">
+                                <div class="text-2xl">${item.emoji}</div>
+                                <span class="font-semibold text-slate-700 text-sm sm:text-base">${item.name}</span>
+                            </div>
+                            <div class="w-24 sm:w-32">
+                                <input type="text" id="qty-input-${item.id}" value="${item.qty}" placeholder="1, 1/2, 2kg"
+                                    class="w-full px-3 py-2 text-center border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 font-medium text-sm sm:text-base">
+                            </div>
+                        </li>
+                    `;
+                });
+            }
+            list.innerHTML = html;
+        }
+
+        function saveQuantities() {
+            selectedItems.forEach(item => {
+                const input = document.getElementById(`qty-input-${item.id}`);
+                if (input) item.qty = input.value.trim() || '1';
+            });
+        }
+
+        // ========== PASO 3: LISTA Y PRECIOS ==========
+        function renderStep3Checklist() {
+            const container = document.getElementById('checklist-container');
+            
+            // Agrupar por categoría
+            const grouped = selectedItems.reduce((acc, item) => {
+                if(!acc[item.category]) acc[item.category] = [];
+                acc[item.category].push(item);
+                return acc;
+            }, {});
+
+            let html = '';
+            for (const [cat, items] of Object.entries(grouped)) {
+                html += `
+                    <div class="mb-5 last:mb-0">
+                        <h3 class="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2 mb-2 flex items-center gap-1">
+                            ${categoryIcons[cat] || '📦'} <span>${cat}</span>
+                        </h3>
+                        <ul class="space-y-1">
+                `;
+                items.forEach(item => {
+                    html += `
+                        <li class="flex items-center p-2 rounded-lg hover:bg-slate-50 transition-colors">
+                            <label class="flex items-center cursor-pointer w-full gap-3">
+                                <input type="checkbox" class="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" 
+                                    ${item.checked ? 'checked' : ''} onchange="toggleCheck(${item.id})">
+                                <span class="font-medium text-slate-700 text-sm sm:text-base flex-1 flex items-center gap-2 ${item.checked ? 'checked-item' : ''}">
+                                    <span class="text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded text-xs font-bold w-12 text-center shrink-0">${item.qty}</span>
+                                    <span class="truncate">${item.name}</span>
+                                </span>
+                            </label>
+                        </li>
+                    `;
+                });
+                html += `</ul></div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        function renderStep3CostCalculator() {
+            const tbody = document.getElementById('cost-table-body');
+            
+            let html = '';
+            selectedItems.forEach(item => {
+                html += `
+                    <tr class="hover:bg-slate-50 transition-colors border-b sm:border-0 border-slate-50 flex flex-col sm:table-row p-3 sm:p-0">
+                        <td class="sm:py-3 sm:px-2 align-middle hidden sm:table-cell">
+                            <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">${item.qty}</span>
+                        </td>
+                        <td class="py-1 sm:py-3 sm:px-2 align-middle font-medium flex items-center gap-2 sm:table-cell">
+                            <span class="sm:hidden text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">${item.qty}</span>
+                            <span class="text-slate-700 text-sm sm:text-base truncate ${item.checked ? 'text-slate-400' : ''}">${item.name}</span>
+                        </td>
+                        <td class="py-1 sm:py-3 sm:px-2 align-middle text-right mt-1 sm:mt-0">
+                            <div class="relative flex items-center justify-end">
+                                <span class="absolute left-3 text-emerald-600 font-bold">$</span>
+                                <input type="number" step="0.50" min="0" placeholder="0.00"
+                                    class="w-full sm:max-w-[110px] pl-7 pr-3 py-2 bg-emerald-50/30 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-right font-semibold text-emerald-900 transition"
+                                    value="${item.price !== null ? item.price : ''}"
+                                    oninput="updatePrice(${item.id}, this.value)">
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function toggleCheck(id) {
+            const item = selectedItems.find(i => i.id === id);
+            if (item) {
+                item.checked = !item.checked;
+                renderStep3Checklist();
+                renderStep3CostCalculator(); 
+            }
+        }
+
+        function updatePrice(id, value) {
+            const item = selectedItems.find(i => i.id === id);
+            if (item) {
+                item.price = value === '' ? null : parseFloat(value);
+                calculateTotal();
+            }
+        }
+
+        function calculateTotal() {
+            const total = selectedItems.reduce((sum, item) => sum + (item.price || 0), 0);
+            document.getElementById('total-display').innerText = '$' + total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+
+        // ========== FUNCIONES DEL MODAL EXCEL ==========
+        function openExportModal() {
+            if (selectedItems.length === 0) {
+                alert("Tu lista de compras está vacía. Añade productos primero.");
+                return;
+            }
+            document.getElementById('export-modal').classList.remove('hidden');
+        }
+
+        function closeExportModal() {
+            document.getElementById('export-modal').classList.add('hidden');
+        }
+
+        // ========== LÓGICA DE SHEETJS (EXCEL) ==========
+        
+        function parseQuantity(qtyStr) {
+            const cleanStr = String(qtyStr).replace(/[a-zA-Z\s]/g, '').trim();
+            if (cleanStr.includes('/')) {
+                const parts = cleanStr.split('/');
+                if(parts.length === 2 && parseFloat(parts[1]) !== 0) {
+                    return parseFloat(parts[0]) / parseFloat(parts[1]);
+                }
+            }
+            return parseFloat(cleanStr) || 1;
+        }
+
+        function createExcelHistory() {
+            let data = selectedItems.map(item => {
+                const cantidadNum = parseQuantity(item.qty);
+                const precioTotal = item.price || 0;
+                const costoUnitario = cantidadNum > 0 ? (precioTotal / cantidadNum) : 0;
+                
+                return {
+                    "Producto": item.name,
+                    "Semana 1": parseFloat(costoUnitario.toFixed(2))
+                };
+            });
+            
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Historial Precios");
+            
+            XLSX.writeFile(wb, "Historial_Compras_Semana_1.xlsx");
+            closeExportModal();
+        }
+
+        function updateExcelHistory(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // Convertir la hoja a JSON
+                    let jsonData = XLSX.utils.sheet_to_json(worksheet);
+                    
+                    // Encontrar la semana más alta en los encabezados
+                    let maxSemana = 0;
+                    if(jsonData.length > 0) {
+                        const headers = Object.keys(jsonData[0]);
+                        headers.forEach(h => {
+                            const match = h.match(/Semana\s+(\d+)/i);
+                            if (match) {
+                                maxSemana = Math.max(maxSemana, parseInt(match[1]));
+                            }
+                        });
+                    }
+                    
+                    const numeroNuevaSemana = maxSemana + 1;
+                    const nombreNuevaSemana = `Semana ${numeroNuevaSemana}`;
+                    
+                    // Crear un mapa para búsqueda rápida de productos existentes
+                    let productMap = {};
+                    jsonData.forEach(row => {
+                        if (row["Producto"]) {
+                            productMap[row["Producto"].toString().toLowerCase().trim()] = row;
+                        }
+                    });
+                    
+                    // Agregar/Actualizar los datos de la lista actual
+                    selectedItems.forEach(item => {
+                        const cantidadNum = parseQuantity(item.qty);
+                        const precioTotal = item.price || 0;
+                        const costoUnitario = cantidadNum > 0 ? (precioTotal / cantidadNum) : 0;
+                        const costoRedondeado = parseFloat(costoUnitario.toFixed(2));
+                        
+                        const prodKey = item.name.toLowerCase().trim();
+                        
+                        if (productMap[prodKey]) {
+                            // Si el producto ya existía en semanas anteriores, solo añadimos el costo de la nueva semana
+                            productMap[prodKey][nombreNuevaSemana] = costoRedondeado;
+                        } else {
+                            // Si es un producto nuevo que no estaba en el excel viejo, lo creamos
+                            let newRow = { "Producto": item.name };
+                            newRow[nombreNuevaSemana] = costoRedondeado;
+                            jsonData.push(newRow);
+                            productMap[prodKey] = newRow; // Añadir al mapa por si acaso
+                        }
+                    });
+                    
+                    // Generar y descargar el nuevo archivo actualizado
+                    const newWs = XLSX.utils.json_to_sheet(jsonData);
+                    const newWb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(newWb, newWs, "Historial Precios");
+                    
+                    XLSX.writeFile(newWb, `Historial_Compras_Semana_${numeroNuevaSemana}.xlsx`);
+                    
+                    closeExportModal();
+                    event.target.value = ""; // Limpiar el input file
+                    alert(`¡Éxito! Archivo actualizado hasta la ${nombreNuevaSemana}`);
+                    
+                } catch (error) {
+                    console.error(error);
+                    alert("Ocurrió un error al leer el archivo. Asegúrate de que tenga el formato correcto.");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // ========== IMPORTAR / EXPORTAR LISTA DE COMPRAS (JSON) ==========
+        
+        function exportListJSON() {
+            if (selectedItems.length === 0) {
+                alert("Tu lista está vacía. Añade productos primero antes de exportar.");
+                return;
+            }
+            
+            // Si el usuario da clic en exportar estando en el Paso 2, guardamos las cantidades primero.
+            if (!document.getElementById('step-2').classList.contains('hidden')) {
+                saveQuantities();
+            }
+
+            // Convertir el arreglo de productos a un texto JSON
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(selectedItems));
+            
+            // Crear un enlace temporal para forzar la descarga del archivo
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", "lista_compras.json");
+            document.body.appendChild(dlAnchorElem);
+            dlAnchorElem.click();
+            dlAnchorElem.remove();
+        }
+
+        function importListJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    
+                    if (Array.isArray(importedData)) {
+                        selectedItems = importedData;
+                        alert("¡Lista cargada correctamente!");
+                        
+                        // Enviar al usuario directamente al Paso 3 para continuar tachando sus productos
+                        goToStep(3); 
+                    } else {
+                        alert("El archivo no tiene el formato de lista de compras correcto.");
+                    }
+                } catch (error) {
+                    console.error("Error leyendo JSON:", error);
+                    alert("Error al importar la lista. El archivo podría estar dañado o no ser válido.");
+                }
+                
+                // Limpiar input file para permitir importar otro archivo después
+                event.target.value = ""; 
+            };
+            reader.readAsText(file);
+        }
+
+        // ========== PWA: REGISTRO DEL SERVICE WORKER ==========
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registrado con éxito:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('Fallo al registrar el ServiceWorker:', error);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>
