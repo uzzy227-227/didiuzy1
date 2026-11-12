@@ -1,4 +1,4 @@
-                <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -418,7 +418,7 @@
             if (step === 1) {
                 document.getElementById('step-1').classList.remove('hidden');
                 subtitle.innerText = "Paso 1: Selecciona los productos que necesitas";
-                renderStep1(); // Refrescar vista
+                renderStep1(); 
             } else if (step === 2) {
                 document.getElementById('step-2').classList.remove('hidden');
                 subtitle.innerText = "Paso 2: ¿Cuánto necesitas de cada cosa?";
@@ -455,7 +455,7 @@
         function filterProducts() {
             searchQuery = document.getElementById('search-input').value.toLowerCase();
             if(searchQuery.length > 0 && currentCategory !== 'Todo') {
-                currentCategory = 'Todo'; // Si busca, quitar filtro de categoría para mostrar resultados de todos lados
+                currentCategory = 'Todo'; 
                 renderCategoryFilters();
             }
             renderStep1();
@@ -466,17 +466,14 @@
             
             let filtered = masterProducts;
 
-            // Filtro Categoria
             if (currentCategory !== 'Todo') {
                 filtered = filtered.filter(p => p.category === currentCategory);
             }
 
-            // Filtro Búsqueda
             if (searchQuery) {
                 filtered = filtered.filter(p => p.name.toLowerCase().includes(searchQuery) || p.category.toLowerCase().includes(searchQuery));
             }
 
-            // También incluir los custom items que se han agregado manualmente en la vista actual si no están filtrados por categoría (o si son 'Extra')
             const customItems = selectedItems.filter(i => i.isCustom);
             let finalProducts = [...filtered];
             
@@ -536,7 +533,7 @@
             
             selectedItems.push(newItem);
             input.value = '';
-            renderStep1(); // Refrescar
+            renderStep1(); 
         }
 
         function updateSelectedCounts() {
@@ -558,7 +555,6 @@
         function renderStep2() {
             const list = document.getElementById('quantity-list');
             
-            // Agrupar por categoría
             const grouped = selectedItems.reduce((acc, item) => {
                 if(!acc[item.category]) acc[item.category] = [];
                 acc[item.category].push(item);
@@ -597,7 +593,6 @@
         function renderStep3Checklist() {
             const container = document.getElementById('checklist-container');
             
-            // Agrupar por categoría
             const grouped = selectedItems.reduce((acc, item) => {
                 if(!acc[item.category]) acc[item.category] = [];
                 acc[item.category].push(item);
@@ -697,7 +692,6 @@
         }
 
         // ========== LÓGICA DE SHEETJS (EXCEL) ==========
-        
         function parseQuantity(qtyStr) {
             const cleanStr = String(qtyStr).replace(/[a-zA-Z\s]/g, '').trim();
             if (cleanStr.includes('/')) {
@@ -741,10 +735,8 @@
                     const firstSheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[firstSheetName];
                     
-                    // Convertir la hoja a JSON
                     let jsonData = XLSX.utils.sheet_to_json(worksheet);
                     
-                    // Encontrar la semana más alta en los encabezados
                     let maxSemana = 0;
                     if(jsonData.length > 0) {
                         const headers = Object.keys(jsonData[0]);
@@ -759,7 +751,6 @@
                     const numeroNuevaSemana = maxSemana + 1;
                     const nombreNuevaSemana = `Semana ${numeroNuevaSemana}`;
                     
-                    // Crear un mapa para búsqueda rápida de productos existentes
                     let productMap = {};
                     jsonData.forEach(row => {
                         if (row["Producto"]) {
@@ -767,7 +758,6 @@
                         }
                     });
                     
-                    // Agregar/Actualizar los datos de la lista actual
                     selectedItems.forEach(item => {
                         const cantidadNum = parseQuantity(item.qty);
                         const precioTotal = item.price || 0;
@@ -777,18 +767,15 @@
                         const prodKey = item.name.toLowerCase().trim();
                         
                         if (productMap[prodKey]) {
-                            // Si el producto ya existía en semanas anteriores, solo añadimos el costo de la nueva semana
                             productMap[prodKey][nombreNuevaSemana] = costoRedondeado;
                         } else {
-                            // Si es un producto nuevo que no estaba en el excel viejo, lo creamos
                             let newRow = { "Producto": item.name };
                             newRow[nombreNuevaSemana] = costoRedondeado;
                             jsonData.push(newRow);
-                            productMap[prodKey] = newRow; // Añadir al mapa por si acaso
+                            productMap[prodKey] = newRow;
                         }
                     });
                     
-                    // Generar y descargar el nuevo archivo actualizado
                     const newWs = XLSX.utils.json_to_sheet(jsonData);
                     const newWb = XLSX.utils.book_new();
                     XLSX.utils.book_append_sheet(newWb, newWs, "Historial Precios");
@@ -796,7 +783,7 @@
                     XLSX.writeFile(newWb, `Historial_Compras_Semana_${numeroNuevaSemana}.xlsx`);
                     
                     closeExportModal();
-                    event.target.value = ""; // Limpiar el input file
+                    event.target.value = ""; 
                     alert(`¡Éxito! Archivo actualizado hasta la ${nombreNuevaSemana}`);
                     
                 } catch (error) {
@@ -807,50 +794,13 @@
             reader.readAsArrayBuffer(file);
         }
 
-        // ========== IMPORTAR / EXPORTAR LISTA DE COMPRAS (JSON) ==========
-function importListJSON(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const importedData = JSON.parse(e.target.result);
-                    
-                    // Acepta tanto si es un arreglo directo como si viene envuelto en un objeto
-                    let itemsArray = [];
-                    if (Array.isArray(importedData)) {
-                        itemsArray = importedData;
-                    } else if (importedData && Array.isArray(importedData.items)) {
-                        itemsArray = importedData.items;
-                    } else if (typeof importedData === 'object' && importedData !== null) {
-                        // Si es un objeto genérico, intentamos extraer sus valores
-                        itemsArray = Object.values(importedData).find(val => Array.isArray(val)) || [];
-                    }
-
-                    if (itemsArray.length > 0 || Array.isArray(importedData)) {
-                        selectedItems = itemsArray;
-                        alert("¡Lista cargada correctamente!");
-                        goToStep(3); 
-                    } else {
-                        alert("El archivo no contiene elementos de lista válidos.");
-                    }
-                } catch (error) {
-                    console.error("Error leyendo JSON:", error);
-                    alert("Error al importar la lista. El archivo podría estar dañado o no ser un JSON válido.");
-                }
-                
-                event.target.value = ""; 
-            };
-            reader.readAsText(file);
-        }
-            // Si el usuario da clic en exportar estando en el Paso 2, guardamos las cantidades primero.
+        // ========== IMPORTAR / EXPORTAR LISTA DE COMPRAS (JSON) CON SOPORTE FLEXIBLE ==========
+        function exportListJSON() {
             if (!document.getElementById('step-2').classList.contains('hidden')) {
                 saveQuantities();
             }
 
             const jsonString = JSON.stringify(selectedItems);
-            // Empaquetar usando Blob para evitar problemas de codificación en celulares
             const blob = new Blob([jsonString], { type: "application/json" });
             const url = URL.createObjectURL(blob);
             
@@ -873,21 +823,27 @@ function importListJSON(event) {
                 try {
                     const importedData = JSON.parse(e.target.result);
                     
+                    let itemsArray = [];
                     if (Array.isArray(importedData)) {
-                        selectedItems = importedData;
+                        itemsArray = importedData;
+                    } else if (importedData && Array.isArray(importedData.items)) {
+                        itemsArray = importedData.items;
+                    } else if (typeof importedData === 'object' && importedData !== null) {
+                        itemsArray = Object.values(importedData).find(val => Array.isArray(val)) || [];
+                    }
+
+                    if (itemsArray.length > 0 || Array.isArray(importedData)) {
+                        selectedItems = itemsArray;
                         alert("¡Lista cargada correctamente!");
-                        
-                        // Enviar al usuario directamente al Paso 3 para continuar tachando sus productos
                         goToStep(3); 
                     } else {
-                        alert("El archivo no tiene el formato de lista de compras correcto.");
+                        alert("El archivo no contiene elementos de lista válidos.");
                     }
                 } catch (error) {
                     console.error("Error leyendo JSON:", error);
-                    alert("Error al importar la lista. El archivo podría estar dañado o no ser válido.");
+                    alert("Error al importar la lista. El archivo podría estar dañado o no ser un JSON válido.");
                 }
                 
-                // Limpiar input file para permitir importar otro archivo después
                 event.target.value = ""; 
             };
             reader.readAsText(file);
